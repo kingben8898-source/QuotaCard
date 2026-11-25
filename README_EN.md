@@ -11,6 +11,23 @@
 
 [简体中文](README.md) | English
 
+<br/>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-dark.jpg" alt="QuotaCard Dark Frosted-Glass Mode" width="380" />
+      <br/>
+      <sub><b>Dark Frosted-Glass View</b> · Dual-Window Matrix, Daily Tokens &amp; Desktop Layer</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-light-drawer.jpg" alt="QuotaCard Light Mode with Quick Appearance Drawer" width="380" />
+      <br/>
+      <sub><b>Light Glass + Appearance Drawer</b> · Live Opacity, Scale &amp; Theme Controls</sub>
+    </td>
+  </tr>
+</table>
+
 </div>
 
 ---

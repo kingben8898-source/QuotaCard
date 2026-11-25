@@ -11,6 +11,23 @@
 
 简体中文 | [English](README_EN.md)
 
+<br/>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-dark.jpg" alt="QuotaCard 深色毛玻璃模式" width="380" />
+      <br/>
+      <sub><b>深色毛玻璃主视图</b> · 双时间窗额度矩阵 + 今日 Token + 贴桌面层</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-light-drawer.jpg" alt="QuotaCard 浅色毛玻璃与快捷外观抽屉" width="380" />
+      <br/>
+      <sub><b>浅色毛玻璃 + 外观抽屉</b> · 实时调节透明度、缩放比例与主题</sub>
+    </td>
+  </tr>
+</table>
+
 </div>
 
 ---
