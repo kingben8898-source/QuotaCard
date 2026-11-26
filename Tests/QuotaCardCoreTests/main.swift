@@ -6,7 +6,7 @@ if let idx = args.firstIndex(of: "--filter"), idx + 1 < args.count {
     filter = args[idx + 1]
 }
 
-let suites: [TestCase] = ModelsAndFormattingTests.all + StateStoreTests.all + PayloadParserTests.all + CLIConfiguratorTests.all + LocalIngestServerTests.all + IngestCLIIntegrationTests.all + WindowGeometryTests.all + TranscriptTokenScannerTests.all + RefreshPolicyTests.all
+let suites: [TestCase] = ModelsAndFormattingTests.all + StateStoreTests.all + PayloadParserTests.all + CLIConfiguratorTests.all + LocalIngestServerTests.all + IngestCLIIntegrationTests.all + WindowGeometryTests.all + TranscriptTokenScannerTests.all + RefreshPolicyTests.all + CodexSessionScannerTests.all
 let selected = suites.filter { tc in
     guard let filter else { return true }
     return "\(tc.suite).\(tc.name)".localizedCaseInsensitiveContains(filter)

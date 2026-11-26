@@ -15,6 +15,7 @@ final class QuotaViewModel: ObservableObject {
     @Published var liveState: QuotaState
     @Published var now: Date = Date()
     @Published var cliStatuses: [ManagedCLI: CLIStatus] = [:]
+    @Published var codexSessionsDetected: Bool = false
     @Published var statusMessage: String?
     @Published var isRefreshing: Bool = false
 
@@ -33,6 +34,8 @@ final class QuotaViewModel: ObservableObject {
     private var activityToken: NSObjectProtocol?
     private var wakeObservers: [NSObjectProtocol] = []
     private var lastAgyPollAt: Date?
+    private var lastCodexSyncAt: Date?
+    private var lastCodexFingerprint: String?
     private var lastTickDate: Date = Date()
 
     init(
@@ -59,6 +62,7 @@ final class QuotaViewModel: ObservableObject {
         startWakeObservers()
         startWatchingDirectory()
         startLocalServer()
+        triggerCodexSync(trigger: .appLaunch)
         triggerAntigravityPoll(trigger: .appLaunch)
     }
 
@@ -158,7 +162,50 @@ final class QuotaViewModel: ObservableObject {
         liveState = store.load()
         refreshCLIStatuses()
         now = Date()
+        triggerCodexSync(trigger: .manual, showStatusFeedback: activeTab.id == "codex")
         triggerAntigravityPoll(trigger: .manual)
+    }
+
+    func syncCodexSessionsNow(userInitiated: Bool = false) {
+        triggerCodexSync(trigger: userInitiated ? .manual : .appLaunch, showStatusFeedback: userInitiated)
+    }
+
+    func triggerCodexSync(trigger: RefreshTrigger, showStatusFeedback: Bool = false) {
+        let current = Date()
+        guard RefreshPolicy.shouldPoll(
+            mode: preferences.refreshMode,
+            trigger: trigger,
+            lastPollAt: lastCodexSyncAt,
+            now: current
+        ) else {
+            return
+        }
+
+        lastCodexSyncAt = current
+        let storeRef = self.store
+        DispatchQueue.global(qos: .utility).async {
+            let fingerprint = CodexSessionScanner.sessionsFingerprint()
+            let detected = (fingerprint != nil)
+            let updated = CodexSessionScanner.syncToStore(storeRef)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.codexSessionsDetected = detected
+                self.lastCodexFingerprint = fingerprint
+                self.lastCodexSyncAt = Date()
+                if let updated {
+                    self.liveState = updated
+                    self.now = Date()
+                    if showStatusFeedback {
+                        self.statusMessage = "已从 ~/.codex/sessions 同步最新 Codex 额度与今日 Token。"
+                    }
+                } else if showStatusFeedback {
+                    self.liveState = storeRef.load()
+                    self.statusMessage = detected
+                        ? "Codex 额度已是最新（来自 ~/.codex/sessions）。"
+                        : "未在 ~/.codex/sessions 检测到 Codex 会话日志。"
+                }
+            }
+        }
     }
 
     func triggerAntigravityPoll(trigger: RefreshTrigger) {
@@ -208,6 +255,7 @@ final class QuotaViewModel: ObservableObject {
             map[cli] = configurator.detectStatus(for: cli)
         }
         cliStatuses = map
+        codexSessionsDetected = CodexSessionScanner.hasSessionLogs()
     }
 
     func installHook(for cli: ManagedCLI) {
@@ -246,11 +294,17 @@ final class QuotaViewModel: ObservableObject {
                 self.lastTickDate = current
                 self.now = current
 
-                // Auto-refresh 5 seconds after any Antigravity 5h/weekly countdown hits zero
+                // Auto-refresh 5 seconds after any Antigravity or Codex 5h/weekly countdown hits zero
                 if let agy = self.liveState.providers["antigravity"],
                    RefreshPolicy.didAnyWindowJustReset(pools: agy.pools, previousCheck: prev, now: current) {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                         self?.triggerAntigravityPoll(trigger: .countdownResetReached)
+                    }
+                }
+                if let codex = self.liveState.providers["codex"],
+                   RefreshPolicy.didAnyWindowJustReset(pools: codex.pools, previousCheck: prev, now: current) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                        self?.triggerCodexSync(trigger: .countdownResetReached)
                     }
                 }
             }
@@ -269,23 +323,39 @@ final class QuotaViewModel: ObservableObject {
         agyTimer.schedule(deadline: .now() + 60, repeating: 60, leeway: .seconds(5))
         agyTimer.setEventHandler { [weak self] in
             self?.triggerAntigravityPoll(trigger: .periodicFallback)
+            self?.triggerCodexSync(trigger: .periodicFallback)
         }
         agyTimer.resume()
         agyDispatchTimer = agyTimer
 
-        // Refresh local Antigravity transcript tokens every 30s (zero network, zero subprocess);
-        // in Smart mode, new token activity triggers a debounced (2-min cooldown) /usage sync!
+        // In Smart mode, check lightweight local activity every 30s (zero network, zero subprocess);
+        // new AGY token activity or Codex session file changes trigger a debounced (2-min cooldown) sync!
         let tokTimer = DispatchSource.makeTimerSource(queue: .main)
         tokTimer.schedule(deadline: .now() + 30, repeating: 30, leeway: .seconds(3))
         tokTimer.setEventHandler { [weak self] in
             guard let self else { return }
+            let mode = self.preferences.refreshMode
+            guard mode != .manualOnly else { return }
+
             let poller = self.agyPoller
+            let prevCodexFP = self.lastCodexFingerprint
+            let checkCodexActivity = (mode == .smart)
+
             DispatchQueue.global(qos: .utility).async {
-                if let updated = poller.refreshLocalTokensOnly() {
+                let agyUpdated = poller.refreshLocalTokensOnly()
+                let codexFP = checkCodexActivity ? CodexSessionScanner.sessionsFingerprint() : prevCodexFP
+                let codexChanged = checkCodexActivity && codexFP != nil && codexFP != prevCodexFP
+
+                if agyUpdated != nil || codexChanged {
                     Task { @MainActor [weak self] in
                         guard let self else { return }
-                        self.liveState = updated
-                        self.triggerAntigravityPoll(trigger: .newTokenActivity)
+                        if let agyUpdated {
+                            self.liveState = agyUpdated
+                            self.triggerAntigravityPoll(trigger: .newTokenActivity)
+                        }
+                        if codexChanged {
+                            self.triggerCodexSync(trigger: .newTokenActivity)
+                        }
                     }
                 }
             }
@@ -299,6 +369,7 @@ final class QuotaViewModel: ObservableObject {
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
             let obs = wsCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor [weak self] in
+                    self?.triggerCodexSync(trigger: .wakeFromSleep)
                     self?.triggerAntigravityPoll(trigger: .wakeFromSleep)
                 }
             }

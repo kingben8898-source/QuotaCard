@@ -31,6 +31,7 @@ public struct ProviderUpdate: Sendable {
     public var tokens: TokenUsage?
     public var sessionTokenSample: SessionTokenSample?
     public var timestamp: Date
+    public var poolsTimestamp: Date?
 
     public init(
         id: String,
@@ -40,7 +41,8 @@ public struct ProviderUpdate: Sendable {
         pools: [QuotaPool]? = nil,
         tokens: TokenUsage? = nil,
         sessionTokenSample: SessionTokenSample? = nil,
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        poolsTimestamp: Date? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -50,6 +52,7 @@ public struct ProviderUpdate: Sendable {
         self.tokens = tokens
         self.sessionTokenSample = sessionTokenSample
         self.timestamp = timestamp
+        self.poolsTimestamp = poolsTimestamp
     }
 }
 
@@ -100,7 +103,7 @@ public final class StateStore: @unchecked Sendable {
             var mergedPoolsUpdatedAt = existing?.poolsUpdatedAt
             if let incomingPools = update.pools {
                 mergedPools = incomingPools
-                mergedPoolsUpdatedAt = update.timestamp
+                mergedPoolsUpdatedAt = update.poolsTimestamp ?? update.timestamp
             }
 
             var mergedTokens = existing?.tokens

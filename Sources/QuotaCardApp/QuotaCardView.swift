@@ -615,15 +615,34 @@ struct QuotaCardView: View {
                     .controlSize(.small)
                 }
             } else if tab.id == "codex" {
-                Text("通过管道将 Codex rateLimits JSON 喂给本地脚本，或在设置页查看本机 HTTP 推送接口。")
-                    .font(.system(size: 12 * scale))
-                    .foregroundColor(secondaryText)
-                    .multilineTextAlignment(.center)
-                Button("查看接入说明与接口") {
-                    onOpenSettings()
+                if viewModel.codexSessionsDetected {
+                    Text("已检测到本机 ~/.codex/sessions 会话日志，点击下方按钮立即同步 5h / 每周额度与今日 Token。")
+                        .font(.system(size: 12 * scale))
+                        .foregroundColor(secondaryText)
+                        .multilineTextAlignment(.center)
+                    Button("立即同步 Codex 额度") {
+                        viewModel.syncCodexSessionsNow(userInitiated: true)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    Text("使用一次 Codex 后会自动从 ~/.codex/sessions 同步额度，也可在设置页通过本机 HTTP 接口推送。")
+                        .font(.system(size: 12 * scale))
+                        .foregroundColor(secondaryText)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: 8 * scale) {
+                        Button("重新检测") {
+                            viewModel.syncCodexSessionsNow(userInitiated: true)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        Button("查看接入说明") {
+                            onOpenSettings()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             } else {
                 Button("打开设置与接入引导") {
                     onOpenSettings()

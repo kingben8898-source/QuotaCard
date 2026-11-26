@@ -26,12 +26,14 @@ struct SettingsSheetView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
                 }
 
-                // Section 1: Antigravity & Claude CLI
-                GroupBox("1. 官方 CLI 接入（推荐）") {
+                // Section 1: Antigravity, Claude Code & OpenAI Codex
+                GroupBox("1. 官方 CLI 与本地日志接入（推荐）") {
                     VStack(alignment: .leading, spacing: 12) {
                         cliSection(.antigravity, installCommand: "curl -fsSL https://antigravity.google/cli/install.sh | bash")
                         Divider()
                         cliSection(.claude, installCommand: "npm install -g @anthropic-ai/claude-code")
+                        Divider()
+                        codexSection()
                     }
                     .padding(6)
                 }
@@ -209,6 +211,45 @@ struct SettingsSheetView: View {
                 Text("已链式保留原状态栏命令：\(chained)")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func codexSection() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("OpenAI Codex")
+                    .font(.headline)
+                Spacer()
+                if viewModel.codexSessionsDetected {
+                    Label("已检测到本地日志", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .help("~/.codex/sessions")
+                } else {
+                    Label("未检测到会话日志", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("立即同步 Codex 额度") {
+                    viewModel.syncCodexSessionsNow(userInitiated: true)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                if viewModel.codexSessionsDetected {
+                    Label(preferences.refreshMode.badgeText, systemImage: "link.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                } else {
+                    Text("使用一次 Codex 后将自动同步 5h / 每周额度与今日 Token")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }

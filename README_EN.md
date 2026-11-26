@@ -58,16 +58,16 @@ All data collection strictly uses official headless CLI commands, official `stat
 
 ### 2. Dual-Window Quota Matrix & Daily Token Analytics
 - **Left-Right Matrix Layout**: Displays each model pool alongside its **5-Hour** and **Weekly** remaining percentages, color-coded progress bars, and individual reset timers (`HH:MM:SS` under 24h, `Xd Xh` over 24h).
-- **Accurate Daily Token Tracking**: Scans documented local Antigravity `transcript.jsonl` logs and CLI hook payloads to aggregate today's total tokens, input/output split, and per-pool usage—automatically rolling over to zero at local midnight.
+- **Accurate Daily Token Tracking**: Scans documented local Antigravity `transcript.jsonl` logs, OpenAI Codex `~/.codex/sessions/` logs, and CLI hook payloads to aggregate today's total tokens, input/output split, and per-pool usage--automatically rolling over to zero at local midnight.
 - **Built-In Demo Mode**: Preview the multi-pool layout and visual themes anytime before connecting a CLI.
 
 ### 3. Smart Power-Saving Background Refresh (No Terminal Needed · 0 Tokens)
-- **Headless Zero-Token Polling**: Silently runs the official `agy -p "/usage" --output-format json` (`num_turns: 0`, `total_tokens: 0`) in the background—no open terminal required.
-- **Five Configurable Refresh Policies** (in `⚙` Settings):
+- **Headless Zero-Token Sync**: Antigravity polls via official `agy -p "/usage" --output-format json` (`num_turns: 0`, `total_tokens: 0`), while OpenAI Codex watches `~/.codex/sessions/` via metadata-only fingerprints--no open terminal required.
+- **Five Configurable Refresh Policies** (shared by both Antigravity and Codex in `⚙` Settings):
 
 | Mode | Trigger Strategy | Best For |
 | :--- | :--- | :--- |
-| **Smart Power-Saving (Default)** | Lightweight 30s local log scan triggers a quota refresh only when **new conversation tokens appear** (2-min cooldown) + **15-min fallback** + **auto-refresh 5s after any countdown hits zero** + **wake-from-sleep / screen-wake refresh** (30s debounce) | Most MacBook users (best balance of freshness & battery life) |
+| **Smart Power-Saving (Default)** | Lightweight 30s local activity check (Codex uses `stat`-only metadata fingerprints with zero disk reads while idle) triggers a refresh only on **new conversation activity** (2-min cooldown) + **15-min fallback** + **auto-refresh 5s after any countdown hits zero** + **wake-from-sleep / screen-wake refresh** (30s debounce) | Most MacBook users (best balance of freshness & battery life) |
 | **Every 5 / 10 / 15 Minutes** | Fixed background interval + countdown-reset & wake refresh | Heavy multi-device concurrent usage |
 | **Manual Only** | Refreshes only when clicking `↻` or manual fetch in Settings | Maximum battery savings |
 
@@ -76,13 +76,13 @@ All data collection strictly uses official headless CLI commands, official `stat
 ### 4. Multi-Provider Support & Extensible Local API
 Switch seamlessly across **AGY / Claude / Codex** tabs from the card header:
 - **Antigravity (`agy`)**: Works out of the box with headless quota polling + local `transcript.jsonl` daily token aggregation.
-- **Claude Code (`claude`)**: One-click official `statusLine` hook setup inside `⚙` Settings—automatically backs up `~/.claude/settings.json` (`.bak`), chains your existing custom statusline without breaking it, and supports one-click restore.
-- **OpenAI Codex CLI**: Pipe `rateLimits` JSON directly into `quota-card-ingest --provider codex` (or `scripts/codex-ingest.sh`).
+- **OpenAI Codex**: Automatically reads official `~/.codex/sessions/` rollout JSONL logs for **zero-config 5-hour & weekly remaining quotas, reset countdowns, multi-`limit_id` pools, and accurate daily token totals** (including deduplication and multi-day continued sessions), governed by the same Smart Power-Saving policy. Also supports stdin piping via `quota-card-ingest --provider codex`.
+- **Claude Code (`claude`)**: One-click official `statusLine` hook setup inside `⚙` Settings--automatically backs up `~/.claude/settings.json` (`.bak`), chains your existing custom statusline without breaking it, and supports one-click restore.
 - **Local Authenticated HTTP API (`127.0.0.1:18421`)**: Ready for browser extensions (e.g., Gemini Web / ChatGPT Web) and custom scripts.
 
 ### 5. Privacy & Security by Design
 - **100% Local**: Zero external analytics, zero cloud sync, zero prompt/conversation uploads.
-- **Strictly Official & Sanctioned Interfaces**: Never probes undocumented desktop ports, never injects into other processes, never reads browser cookies.
+- **Strictly Official & Sanctioned Interfaces**: Never probes undocumented desktop ports, never injects into other processes, never reads browser cookies or credential files such as `auth.json`.
 - **Hardened Loopback Server**: Binds strictly to `127.0.0.1`, generates a `0600` 32-byte random Bearer token on first run, and verifies tokens in constant time.
 - **Concurrency-Safe Storage**: Uses `flock` file locking and atomic replacement writes on `~/.quota-card/state.json`.
 
@@ -94,11 +94,13 @@ Switch seamlessly across **AGY / Claude / Codex** tabs from the card header:
 flowchart LR
     A["Antigravity CLI<br/>agy -p /usage (0 Token)"] --> P["AntigravityPoller"]
     B["Local Transcripts<br/>transcript.jsonl"] --> T["TranscriptTokenScanner"]
-    C["Claude Code / Codex<br/>statusLine & Pipe"] --> I["quota-card-ingest CLI"]
+    E["OpenAI Codex Logs<br/>~/.codex/sessions/*.jsonl"] --> X["CodexSessionScanner"]
+    C["Claude Code / Codex Pipe<br/>statusLine & stdin"] --> I["quota-card-ingest CLI"]
     D["Browser Extension / Script<br/>HTTP POST + Bearer Token"] --> H["LocalIngestServer<br/>127.0.0.1:18421"]
 
     P --> S[("StateStore<br/>~/.quota-card/state.json<br/>(flock + Atomic Write)")]
     T --> S
+    X --> S
     I --> S
     H --> S
 
@@ -174,16 +176,16 @@ curl -X POST "http://127.0.0.1:18421/v1/providers/gemini-web" \
 ## Tech Stack & Project Structure
 
 - **Stack**: Pure Swift 6.0, SwiftUI, AppKit, Network.framework (**Zero third-party dependencies**)
-- **Tests**: 47 built-in unit & integration tests (zero `XCTest` dependency; runs directly with Command Line Tools)
+- **Tests**: 52 built-in unit & integration tests (zero `XCTest` dependency; runs directly with Command Line Tools)
 
 ```text
 QuotaCard/
 ├── Package.swift                  # Swift Package manifest (Core / Ingest CLI / App / Tests)
 ├── Sources/
-│   ├── QuotaCardCore/             # Models, StateStore, PayloadParser, RefreshPolicy, LocalIngestServer, WindowGeometry, TranscriptTokenScanner
+│   ├── QuotaCardCore/             # Models, StateStore, PayloadParser, RefreshPolicy, Codex/AGY Scanners, LocalIngestServer, WindowGeometry
 │   ├── QuotaCardIngest/           # Zero-dependency CLI helper for statusLine & pipe ingestion
 │   └── QuotaCardApp/              # SwiftUI card views, AppKit NSPanel, 8-way resize overlay, menu bar & settings
-├── Tests/QuotaCardCoreTests/      # 47 unit & end-to-end integration tests
+├── Tests/QuotaCardCoreTests/      # 52 unit & end-to-end integration tests
 └── scripts/
     ├── build-app.sh               # macOS .app bundle build script
     ├── agy-statusline.sh          # Antigravity statusLine bridge
